@@ -1,0 +1,987 @@
+LIBRARY
+
+```{r LIbrary}
+#Data Preprocessing
+library(dplyr) 
+
+#Stasionarity
+library(tseries)
+
+#Optimum Lag dan kointegrasi
+library(vars)
+
+#Heteroskedaticity dan kausalitas granjer
+library(lmtest)
+
+#Kointegrasi
+library(urca)
+
+#Kausalitas Granjer
+library(ggplot2)
+library(scales)
+
+#Korelasi
+library("ggpubr")
+
+#Markov switching
+library(MSwM) 
+```
+
+
+----------------------------------TAHAPAN EKSPERMEN--------------------------------------------
+
+<><><>PRE-PROCESSING<><><>
+
+```{r Pre-processing}
+# 1. Baca file CSV
+data <- read.csv("D:/Marcov/Coba 5/DataSemua.csv")
+
+str(data)
+
+data$FINS <- as.numeric(gsub(",", ".", gsub("\\.", "", data$FINS)))
+data$DPKS <- as.numeric(gsub(",", ".", gsub("\\.", "", data$DPKS)))
+data$M2 <- as.numeric(gsub(",", "", data$M2))
+data$PDB <- as.numeric(gsub(",", "", data$PDB))
+data$USD <- as.numeric(gsub(",", ".", gsub("\\.", "", data$USD)))
+
+# 2. Pilih variabel yang akan dinormalisasi
+variables_to_normalize <- c("FINS", "ROAS", "DPKS", "FDR", "BI7DRR", "USD", "INFLASI", "M2", "PDB")
+
+# Periksa tipe data dari kolom yang akan dinormalisasi
+str(data[variables_to_normalize])
+
+# 3. Konversi kolom yang seharusnya numerik
+data[variables_to_normalize] <- lapply(data[variables_to_normalize], function(x) as.numeric(as.character(x)))
+
+# Tangani nilai NA yang mungkin muncul setelah konversi
+data[variables_to_normalize] <- lapply(data[variables_to_normalize], function(x) ifelse(is.na(x), mean(x, na.rm = TRUE), x))
+
+# 4. Fungsi untuk normalisasi 0-1
+normalize <- function(x) {
+  return((x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
+}
+
+# 5. Terapkan normalisasi ke variabel yang dipilih
+normalized_data <- data %>%
+  mutate(across(all_of(variables_to_normalize), normalize))
+
+# 6. Tampilkan hasil
+print(normalized_data)
+
+# 7. Jika ingin menyimpan hasil ke file CSV baru
+#write.csv(normalized_data, "D:/Marcov/Coba 5/DataSemua_Normalized.csv", row.names = FALSE)
+```
+
+
+<><><>PLOT DATA<><><>
+```{r Plot Data}
+# Memuat paket yang diperlukan
+library(ggplot2)
+
+# Membaca data
+data <- read.csv("D:/Marcov/Coba 5/DataSemua_Normalized.csv")
+
+# Mengubah format tanggal
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Membuat plot menggunakan ggplot2
+ggplot(data, aes(x = Tanggal)) +
+  geom_line(aes(y = FINS, color = "FINS")) +
+  geom_line(aes(y = ROAS, color = "ROAS")) +
+  geom_line(aes(y = DPKS, color = "DPKS")) +
+  geom_line(aes(y = FDR, color = "FDR")) +
+  geom_line(aes(y = PDB, color = "PDB")) +
+  geom_line(aes(y = BI7DRR, color = "BI7DRR")) +
+  geom_line(aes(y = INFLASI, color = "INFLASI")) +
+  geom_line(aes(y = M2, color = "M2")) +
+  geom_line(aes(y = USD, color = "USD")) +
+  scale_color_manual(name = "Variabel",
+                     values = c("FINS" = "blue", "ROAS" = "red", "DPKS" = "green",
+                                "FDR" = "orange", "PDB" = "purple", "BI7DRR" = "brown",
+                                "INFLASI" = "black", "M2" = "grey", "USD" = "pink")) +
+  labs(x = "Tanggal", y = "Nilai", title = "Grafik Data Indikator") +
+  theme_minimal()
+
+```
+
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$FINS))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$DPKS))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$ROAS))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$PDB))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$M2))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$BI7DRR))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$FDR))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$INFLASI))
+```
+
+
+```{r}
+
+###################################################
+### code chunk number 3: examples.rnw:55-56
+###################################################
+plot(ts(data$USD))
+```
+
+
+
+<><><>STASIONARITY<><><>
+1.SEMUA VARIABEL
+```{r Stasionarity}
+# Membaca data dari file CSV
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Melakukan prapemrosesan data
+
+# Menghapus baris yang mengandung nilai yang hilang jika ada
+data <- na.omit(data)
+
+# Konversi data menjadi time series
+ts_data <- ts(data$FINS, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$DPKS, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$ROAS, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$BI7DRR, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$INFLASI, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$FDR, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$M2, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$PDB, start = c(2017, 1), frequency = 12)
+ts_data <- ts(data$USD, start = c(2017, 1), frequency = 12)
+
+# Menerapkan differencing pertama pada deret waktu
+diff_ts_data <- diff(ts_data)
+
+# Uji stasionaritas pada differenced pertama menggunakan ADF
+adf_test_diff <- adf.test(diff_ts_data)
+
+# Cetak hasil uji ADF pada differenced pertama
+print(adf_test_diff)
+
+```
+
+
+2. MASING MASING VARIABEL
+```{r}
+library(tseries)
+
+# Import data
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Periksa nama kolom
+print(colnames(data))
+
+# Pilih kolom yang benar-benar ada dalam data
+data <- data[, c("Tanggal", "FINS", "DPKS", "ROAS", "BI7DRR", "FDR", "M2", "USD", "PDB", "INFLASI")]
+
+# Menghapus baris yang mengandung nilai yang hilang jika ada
+data <- na.omit(data)
+
+# Konversi data menjadi time series
+ts_FINS <- ts(data$FINS, start = c(2017, 1), frequency = 12)
+ts_DPKS <- ts(data$DPKS, start = c(2017, 1), frequency = 12)
+ts_ROAS <- ts(data$ROAS, start = c(2017, 1), frequency = 12)
+ts_BI7DRR <- ts(data$BI7DRR, start = c(2017, 1), frequency = 12)
+ts_FDR <- ts(data$FDR, start = c(2017, 1), frequency = 12)
+ts_M2 <- ts(data$M2, start = c(2017, 1), frequency = 12)
+ts_USD <- ts(data$USD, start = c(2017, 1), frequency = 12)
+ts_PDB <- ts(data$PDB, start = c(2017, 1), frequency = 12)
+ts_INFLASI <- ts(data$INFLASI, start = c(2017, 1), frequency = 12)
+
+# Menerapkan differencing pertama pada setiap deret waktu
+diff_ts_FINS <- diff(ts_FINS)
+diff_ts_DPKS <- diff(ts_DPKS)
+diff_ts_ROAS <- diff(ts_ROAS)
+diff_ts_BI7DRR <- diff(ts_BI7DRR)
+diff_ts_FDR <- diff(ts_FDR)
+diff_ts_M2 <- diff(ts_M2)
+diff_ts_USD <- diff(ts_USD)
+diff_ts_PDB <- diff(ts_PDB)
+diff_ts_INFLASI <- diff(ts_INFLASI)
+
+# Uji stasionaritas pada differenced pertama menggunakan ADF
+adf_test_diff_FINS <- adf.test(diff_ts_FINS)
+adf_test_diff_DPKS <- adf.test(diff_ts_DPKS)
+adf_test_diff_ROAS <- adf.test(diff_ts_ROAS)
+adf_test_diff_BI7DRR <- adf.test(diff_ts_BI7DRR)
+adf_test_diff_FDR <- adf.test(diff_ts_FDR)
+adf_test_diff_M2 <- adf.test(diff_ts_M2)
+adf_test_diff_USD <- adf.test(diff_ts_USD)
+adf_test_diff_PDB <- adf.test(diff_ts_PDB)
+adf_test_diff_INFLASI <- adf.test(diff_ts_INFLASI)
+
+# Cetak hasil uji ADF pada differenced pertama
+print("ADF Test Results for FINS:")
+print(adf_test_diff_FINS)
+if (adf_test_diff_FINS$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for DPKS:")
+print(adf_test_diff_DPKS)
+if (adf_test_diff_DPKS$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for ROAS:")
+print(adf_test_diff_ROAS)
+if (adf_test_diff_ROAS$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for BI7DRR:")
+print(adf_test_diff_BI7DRR)
+if (adf_test_diff_BI7DRR$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for FDR:")
+print(adf_test_diff_FDR)
+if (adf_test_diff_FDR$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for M2:")
+print(adf_test_diff_M2)
+if (adf_test_diff_M2$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for USD:")
+print(adf_test_diff_USD)
+if (adf_test_diff_USD$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+print("ADF Test Results for PDB:")
+print(adf_test_diff_PDB)
+if (adf_test_diff_PDB$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+
+print("ADF Test Results for INFLASI:")
+print(adf_test_diff_INFLASI)
+if (adf_test_diff_INFLASI$p.value < 0.05) {
+  print("The series is stationary.")
+} else {
+  print("The series is non-stationary.")
+}
+
+
+```
+
+3. SECOND DIFFRENCE
+```{r}
+# Menerapkan differencing kedua pada BI7DRR
+diff2_ts_BI7DRR <- diff(diff(ts_BI7DRR))
+
+# Uji stasionaritas pada differencing kedua menggunakan ADF
+adf_test_diff2_BI7DRR <- adf.test(diff2_ts_BI7DRR)
+
+# Cetak hasil uji ADF pada differencing kedua
+print(adf_test_diff2_BI7DRR)
+
+```
+
+
+
+
+<><><>OPTIMUM LAG<><><>
+```{r Optimum Lag}
+data_clean <- na.omit(data)  # Menghapus baris dengan nilai yang hilang (NA)
+FINS_vector <- as.numeric(data_clean$FINS)
+ROAS_vector <- as.numeric(data_clean$ROAS)
+DPKS_vector <- as.numeric(data_clean$DPKS)
+FDR_vector <- as.numeric(data_clean$FDR)
+BI7DRR_vector <- as.numeric(data_clean$BI7DRR)
+USD_vector <- as.numeric(data_clean$USD)
+INFLASI_vector <- as.numeric(data_clean$INFLASI)
+M2_vector <- as.numeric(data_clean$M2)
+PDB_vector <- as.numeric(data_clean$PDB)
+
+str(data_clean)
+result <- VARselect(data_clean[, -1], lag.max = 10, type = "both")
+
+# Print hasil lengkap
+print(result)
+```
+
+
+<><><>HETEROSKEDATICITY<><><>
+```{r HETEROSKEDATICITY}
+# Install dan muat paket yang diperlukan
+library(lmtest)
+
+# Fungsi untuk Breusch-Pagan Test untuk satu variabel
+breusch_pagan_test_single <- function(data, FINSendent_variable, inFINSendent_variable) {
+  # Membuat model regresi untuk variabel tertentu
+  model <- lm(data[, FINSendent_variable] ~ data[, inFINSendent_variable])
+  
+  # Melakukan Breusch-Pagan Test
+  bp_test <- bptest(model)
+  
+  # Menampilkan hasil test
+  cat("Variabel:", inFINSendent_variable, "\n")
+  print(bp_test)
+  
+  # Mengembalikan nilai p-value
+  return(bp_test$p.value)
+}
+
+# Membaca data dari file CSV
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Membuat model regresi
+model <- lm(FINS ~ PDB + DPKS+ ROAS + USD+ M2+ FDR + BI7DRR + INFLASI, data = data)
+
+# Lakukan uji Breusch-Pagan
+bp_test <- bptest(model)
+
+# Tampilkan hasil uji
+print(bp_test)
+
+# Jika terdapat heteroskedastisitas, gunakan estimasi robust standard errors
+if (bp_test$p.value < 0.05) {
+  robust_model <- coeftest(model, vcov = vcovHC)
+  print(summary(robust_model))
+} else {
+  print(summary(model))
+}
+
+# Inisialisasi dataframe untuk menyimpan hasil uji
+test_results <- data.frame(Variable = character(ncol(data) - 1), P_Value = numeric(ncol(data) - 1))
+
+# Loop melalui setiap variabel kecuali kolom pertama (tanggal)
+for (i in seq_along(data)[-1]) {
+  # Lakukan uji Breusch-Pagan untuk setiap variabel
+  p_value <- breusch_pagan_test_single(data, "FINS", colnames(data)[i])
+  
+  # Simpan hasil uji ke dataframe
+  test_results[i - 1, ] <- list(colnames(data)[i], p_value)
+}
+
+# Tampilkan hasil uji untuk setiap variabel
+print(test_results)
+
+# Cek variabel dengan heteroskedastisitas signifikan
+significant_vars <- test_results$Variable[test_results$P_Value < 0.05]
+if (length(significant_vars) > 0) {
+  cat("Variabel dengan heteroskedastisitas signifikan:", paste(significant_vars, collapse = ", "), "\n")
+} else {
+  print("Tidak ada bukti heteroskedastisitas signifikan pada variabel apapun.")
+}
+```
+
+
+<><><>KOINTEGRASI<><><>
+*Kointegrasi di test per data FINSenden dan inFINSenden mencakup nilai kointegrasi johansen 
+dan model VAR VECM
+PDB
+```{r KOINTEGRAS}
+# Load necessary libraries
+library(urca)
+library(vars)
+
+# Import data
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Ambil hanya kolom FINS dan PDB dari data
+data <- data[, c("FINS", "PDB")]
+
+# Konversi data ke time series (asumsikan frekuensi bulanan)
+FINS <- ts(data$FINS, start = c(2017, 1), frequency = 12)
+PDB <- ts(data$PDB, start = c(2017, 1), frequency = 12)
+
+# Gabungkan data menjadi satu objek matriks time series
+ts_data <- cbind(FINS, PDB)
+
+# Lakukan uji Johansen
+johansen_test <- ca.jo(ts_data, type = "trace", ecdet = "none", K = 2)
+
+# Tampilkan hasil uji Johansen
+summary(johansen_test)
+
+# Tentukan apakah ada kointegrasi
+trace_test_stat <- johansen_test@teststat
+critical_values <- johansen_test@cval
+
+# Lakukan uji pada tingkat signifikansi 5%
+significance_level <- 0.05
+
+# Tampilkan hasil uji statistik dan nilai kritis
+print(trace_test_stat)
+print(critical_values)
+
+# Kesimpulan kointegrasi pada tingkat signifikansi 5%
+kointegrasi <- FALSE
+
+# Bandingkan nilai test statistic dengan nilai kritis pada tingkat signifikansi 5%
+for (i in 1:length(trace_test_stat)) {
+  if (trace_test_stat[i] > critical_values[i, 2]) {  # Nilai kritis pada kolom 2 adalah untuk tingkat signifikansi 5%
+    kointegrasi <- TRUE
+    break
+  }
+}
+
+# Tampilkan kesimpulan kointegrasi
+if (kointegrasi) {
+  cat("Terdapat kointegrasi antara variabel FINS dan PDB.\n")
+  
+  # Lakukan estimasi VECM
+  vecm_model <- cajorls(johansen_test, r = 1)  # Mengasumsikan ada 1 hubungan kointegrasi
+  
+  # Tampilkan hasil VECM yang lebih lengkap
+  cat("Hasil estimasi VECM:\n")
+  print(summary(vecm_model$rlm))
+  
+} else {
+  cat("Tidak terdapat kointegrasi antara variabel FINS dan PDB.\n")
+  
+  # Jika tidak ada kointegrasi, kita dapat menggunakan model VAR
+  var_model <- VAR(ts_data, p = 2, type = "const")  # Menggunakan lag yang sama dengan uji Johansen
+  
+  # Tampilkan hasil VAR
+  cat("Hasil estimasi VAR:\n")
+  print(summary(var_model))
+}
+```
+
+
+
+
+<><><>KAUSALITAS<><><>
+*Kausalitas granjer di test variabel FINSendent dan inFINSendent
+```{r KAUSALITAS}
+# Muat paket
+library(lmtest)
+library(ggplot2)
+library(scales) # Untuk skala tanggal
+
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Memeriksa struktur data untuk memastikan semuanya dalam format yang benar
+str(data)
+
+# Inisialisasi daftar untuk menyimpan tanggal signifikan
+significant_dates <- c()
+
+# Mengatur ukuran window
+window_size <- 10  # Ukuran window yang lebih besar untuk stabilitas
+
+# Loop melalui data dengan window bergulir
+for (i in window_size:nrow(data)) {
+  # Membuat subset data
+  subset_data <- data[(i-window_size+1):i, ]
+  
+  # Melakukan uji kausalitas Granger antara variabel "FINS" dan "INFLASI" dengan lag = 1
+  granger_test <- tryCatch({
+    grangertest(ROAS ~ FINS, order = 1, data = subset_data)
+  }, error = function(e) {
+    return(NULL)  # Abaikan iterasi jika terjadi error
+  })
+  
+  # Jika uji berhasil, lanjutkan dengan pemeriksaan p-value
+  if (!is.null(granger_test)) {
+    print(granger_test)
+    
+    # Memeriksa apakah p-value signifikan
+    if (granger_test$`Pr(>F)`[2] < 0.05) {
+      significant_dates <- c(significant_dates, as.character(subset_data$Tanggal[nrow(subset_data)]))
+    }
+  }
+}
+
+# Mengonversi tanggal signifikan menjadi format Date untuk ggplot
+significant_dates <- as.Date(significant_dates)
+
+# Membuat grafik time series dengan menambahkan titik-titik signifikan
+p <- ggplot(data, aes(x = Tanggal)) +
+  geom_line(aes(y = ROAS, color = "ROAS"), size = 1) +
+  geom_line(aes(y = FINS, color = "FINS"), size = 1) +
+  scale_x_date(labels = date_format("%Y-%m"), breaks = date_breaks("months")) +
+  labs(title = "Grafik Garis Waktu: ROAS vs. FINS",
+       x = "Tanggal",
+       y = "Nilai",
+       color = "Variabel") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "top") +
+  scale_color_manual(values = c("ROAS" = "blue", "FINS" = "red"))
+
+# Menambahkan garis vertikal jika ada titik signifikan
+if (length(significant_dates) > 0) {
+  p <- p + geom_vline(xintercept = as.numeric(significant_dates), color = "green", linetype = "dashed") +
+    annotate("text", x = max(data$Tanggal), y = max(data$FINS), label = "Signifikan", color = "green", hjust = 1, vjust = -1)
+}
+
+# Menampilkan plot
+print(p)
+
+```
+
+*Kausalitas granjer di test variabel FINSendent dan inFINSendent
+```{r}
+# Muat paket
+library(lmtest)
+library(ggplot2)
+library(scales) # Untuk skala tanggal
+
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+# Memeriksa struktur data untuk memastikan semuanya dalam format yang benar
+str(data)
+
+# Inisialisasi daftar untuk menyimpan tanggal signifikan
+significant_dates <- c()
+
+# Mengatur ukuran window
+window_size <- 10  # Ukuran window yang lebih besar untuk stabilitas
+
+# Loop melalui data dengan window bergulir
+for (i in window_size:nrow(data)) {
+  # Membuat subset data
+  subset_data <- data[(i-window_size+1):i, ]
+  
+  # Melakukan uji kausalitas Granger antara variabel "FINS" dan "INFLASI" dengan lag = 1
+  granger_test <- tryCatch({
+    grangertest(FINS ~ ROAS, order = 1, data = subset_data)
+  }, error = function(e) {
+    return(NULL)  # Abaikan iterasi jika terjadi error
+  })
+  
+  # Jika uji berhasil, lanjutkan dengan pemeriksaan p-value
+  if (!is.null(granger_test)) {
+    print(granger_test)
+    
+    # Memeriksa apakah p-value signifikan
+    if (granger_test$`Pr(>F)`[2] < 0.05) {
+      significant_dates <- c(significant_dates, as.character(subset_data$Tanggal[nrow(subset_data)]))
+    }
+  }
+}
+
+# Mengonversi tanggal signifikan menjadi format Date untuk ggplot
+significant_dates <- as.Date(significant_dates)
+
+# Membuat grafik time series dengan menambahkan titik-titik signifikan
+p <- ggplot(data, aes(x = Tanggal)) +
+  geom_line(aes(y = FINS, color = "FINS"), size = 1) +
+  geom_line(aes(y = ROAS, color = "ROAS"), size = 1) +
+  scale_x_date(labels = date_format("%Y-%m"), breaks = date_breaks("months")) +
+  labs(title = "Grafik Garis Waktu: FINS vs. ROAS",
+       x = "Tanggal",
+       y = "Nilai",
+       color = "Variabel") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "top") +
+  scale_color_manual(values = c("FINS" = "blue", "ROAS" = "red"))
+
+# Menambahkan garis vertikal jika ada titik signifikan
+if (length(significant_dates) > 0) {
+  p <- p + geom_vline(xintercept = as.numeric(significant_dates), color = "green", linetype = "dashed") +
+    annotate("text", x = max(data$Tanggal), y = max(data$FINS), label = "Signifikan", color = "green", hjust = 1, vjust = -1)
+}
+
+# Menampilkan plot
+print(p)
+
+```
+
+
+
+<><><>KORELASI<><><>
+*Korelasi  pearson di test berdasarkan variabel FINSendent dan inFINSenden
+```{r KORELASI}
+library("ggpubr")
+
+
+# Load and preprocess the data
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+
+# Uji korelasi antara variabel "FINS" dan "INFLASI"
+cor_test_result <- cor.test(data$FINS, data$INFLASI)
+print(cor_test_result)
+
+# Membuat scatter plot dengan garis regresi dan koefisien korelasi
+ggscatter(data, x = "DPKS", y = "FINS", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "DPKS", ylab = "FINS")
+
+# Kesimpulan dari uji korelasi
+correlation_coefficient <- cor_test_result$estimate
+p_value <- cor_test_result$p.value
+
+cat("Koefisien korelasi antara FINS dan DPKS adalah", correlation_coefficient, "\n")
+cat("Nilai p dari uji korelasi adalah", p_value, "\n")
+
+if (p_value < 0.05) {
+  cat("Hasil ini signifikan pada tingkat signifikansi 5%, yang berarti terdapat korelasi yang signifikan antara FINS dan DPKS.\n")
+} else {
+  cat("Hasil ini tidak signifikan pada tingkat signifikansi 5%, yang berarti tidak terdapat korelasi yang signifikan antara FINS dan DPKS.\n")
+}
+
+```
+
+
+*Korelasi  pearson di test berdasarkan variabel FINSendent dan inFINSenden
+```{r}
+library("ggpubr")
+
+
+# Load and preprocess the data
+data <- read.csv("DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+
+# Uji korelasi antara variabel "FINS" dan "INFLASI"
+cor_test_result <- cor.test(data$FINS, data$INFLASI)
+print(cor_test_result)
+
+# Membuat scatter plot dengan garis regresi dan koefisien korelasi
+ggscatter(data, x = "INFLASI", y = "FINS", 
+          add = "reg.line", conf.int = TRUE, 
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "INFLASI", ylab = "FINS")
+
+# Kesimpulan dari uji korelasi
+correlation_coefficient <- cor_test_result$estimate
+p_value <- cor_test_result$p.value
+
+cat("Koefisien korelasi antara FINS dan INFLASI adalah", correlation_coefficient, "\n")
+cat("Nilai p dari uji korelasi adalah", p_value, "\n")
+
+if (p_value < 0.05) {
+  cat("Hasil ini signifikan pada tingkat signifikansi 5%, yang berarti terdapat korelasi yang signifikan antara FINS dan INFLASI.\n")
+} else {
+  cat("Hasil ini tidak signifikan pada tingkat signifikansi 5%, yang berarti tidak terdapat korelasi yang signifikan antara FINS dan INFLASI.\n")
+}
+
+```
+
+
+
+
+
+<><><>REGRESI<><><>
+1. semua variabel
+```{r Regresi}
+library(MSwM)
+data <- read.csv("D:/Marcov/Coba 5/DataSemua_Normalized.csv")
+data$Tanggal <- as.Date(data$Tanggal, format = "%m/%d/%Y")
+
+attach(data)
+y=cbind(FINS)
+x=cbind(ROAS, DPKS, FDR, BI7DRR, USD, M2, PDB)
+#x=cbind(ROAS)
+
+olsz.FINS=lm(y~x)
+
+summary(olsz.FINS)
+```
+
+
+
+<><><>Markov Switching<><><><>
+
+```{r Markov Switching}
+
+MS_Var <- function(dep) {
+  # Konversi data frame ke matriks jika diperlukan
+  if (!is.matrix(dep)) {
+    dep <- as.matrix(dep)
+  }
+  
+  # Asumsikan dep adalah data dengan kolom: FINS, ROAS, DPKS, FDR, BI7DRR, USD, M2, PDB
+  # Pisahkan variabel terikat dan variabel bebas
+  dep_var <- dep[, "FINS", drop = FALSE]  # Variabel terikat
+  indep_vars <- dep[, c("ROAS", "DPKS", "FDR", "BI7DRR", "USD", "M2", "PDB")]  # Variabel bebas
+  
+  dim_data <- dim(dep_var)
+  
+  # Menggunakan semua kolom yang tersedia di dep_var dan indep_vars
+  indep <- indep_vars
+  
+  # Menghindari penggunaan variabel global, gunakan variabel lokal
+  k <- 3  # Mengubah jumlah state menjadi 3
+  S <- c(2)
+  
+  nrdm <- dim(dep_var)
+  nr <- nrdm[1]
+  n_dep <- nrdm[2]
+  
+  n_indep <- ncol(indep)
+  n_S <- sum(S)
+  n_nS <- n_indep - n_S
+  S_S <- dep_var / dep_var
+  
+  count <- 0
+  countS <- 0
+  
+  # Hitung Parameter Awal
+  indep_ols <- numeric(n_indep)
+  for (i in 1:n_indep) {
+    param_ols_S <- lm(dep_var ~ indep[,i])
+    param_ols_S <- coefficients(param_ols_S)
+    indep_ols[i] <- param_ols_S[2]
+  }
+  
+  param0_indep_STmp <- indep_ols
+  param0_indep_S <- c(indep_ols)
+  for (i in 2:k) {
+    param0_indep_S <- c(param0_indep_S, -param0_indep_STmp)
+  }
+  
+  # Hitung Nilai Sigma dan Matriks Transisi Awal
+  sigma <- diag(cov(dep_var)) # Menggunakan diag untuk mendapatkan diagonal dari covariance matrix
+  sigma <- rep(sigma, k)  # Mengulangi sigma untuk setiap state
+  tranmatrix <- matrix(1/k, nrow = k, ncol = k)  # Matriks transisi harus k x k
+  
+  param0 <- c(sigma, param0_indep_S, as.vector(tranmatrix))
+  
+  # Batas Bawah untuk Matriks Variansi Kovariansi
+  sigmalB <- rep(-Inf, n_dep)
+  
+  # Batas atas dan bawah
+  uB <- c(rep(Inf, length(sigma)), rep(Inf, length(param0_indep_S)), rep(.99, length(tranmatrix)))
+  lB <- c(rep(sigmalB, 2), rep(-Inf, length(param0_indep_S)), rep(0, length(tranmatrix)))
+  
+  # Jalankan optimasi dengan nlminb
+  print('Running Optimization with nlminb')
+  res <- nlminb(param0, MS_Var_Likelihood, dep = dep_var, lower = lB, upper = uB, control=list(maxiter=10))
+  print('Optimization Completed')
+  
+  # Hitung Output untuk Parameter Optimal
+  ModelOutput <- MS_Var_Likelihood_Output(res$par, nr, dep_var)
+  
+  # Menghitung probabilitas halus
+  Prob_t_1 <- matrix(0, nrow = nr, ncol = k)
+  Prob_t_1[1,] <- rep(1 / k, k)
+  
+  for (i in 2:nr) {
+    Eadj <- ModelOutput$`filtered probs`[i-1,]
+    AdjDen <- ModelOutput$`transition matrix`
+    densum <- rep(1, k)
+    nadj <- ModelOutput$densities[i]
+    for (r in 1:k) {
+      AdjDen[,r] <- ModelOutput$`transition matrix`[,r] * Eadj[r]
+    }
+    for (r in 1:k) {
+      densum[r] <- sum(AdjDen[r,])
+    }
+    Prob_t_1[i,] <- densum
+  }
+  
+  smooth_value <- matrix(0, nrow = 1, ncol = k)
+  filtProb <- ModelOutput$`filtered probs`
+  P <- ModelOutput$`transition matrix`
+  
+  smoothProb <- matrix(0, nrow = nr, ncol = k)
+  smoothProb[nr,] <- filtProb[nr,]  # Gunakan nilai filtered terakhir sebagai initial value
+  
+  for (i in (nr - 1):1) {
+    for (j1 in 1:k) {
+      for (j2 in 1:k) {
+        smooth_value[1, j2] <- smoothProb[i + 1, j2] * filtProb[i, j1] * P[j2, j1] / Prob_t_1[i + 1, j2]
+      }
+      smoothProb[i, j1] <- sum(smooth_value)
+    }
+  }
+  
+  # Plot Probabilitas Filtered dan Kembalikan Output
+  state1 <- ModelOutput$`filtered probs`[,2]
+  plot(state1, type = 'l', main = "filtered probabilities for state 2")
+  
+  # Plot Probabilitas Smoothed dan Kembalikan Output
+  state1 <- smoothProb[,2]
+  plot(state1, type = 'l', main = "smoothed probabilities for state 2")
+  
+  # Probabilitas Smoothed
+  state1 <- smoothProb[,1]
+  state2 <- smoothProb[,2]
+  state3 <- smoothProb[,3]
+  smoothProb <- cbind(state1, state2, state3)
+  
+  ModelOutput$`smoothed Probs` <- smoothProb
+  
+  # Menghitung AIC
+  n_obs <- nrow(dep_var)
+  n_params <- length(res$par)
+  aic <- 2 * n_params - 2 * res$objective
+  
+  # Menghitung BIC
+  bic <- log(n_obs) * n_params - 2 * res$objective
+  
+  # Tambahkan AIC dan BIC ke ModelOutput
+  ModelOutput$aic <- aic
+  ModelOutput$bic <- bic
+  
+  # Plot probabilitas smoothed untuk state 3
+  state3 <- smoothProb[,3]
+  plot(state3, type = 'l', main = "smoothed probabilities for state 3")
+  
+  return(ModelOutput)
+}
+
+MS_Var_Likelihood <- function(params, dep) {
+  n <- nrow(dep)
+  k <- 3
+  n_dep <- ncol(dep)
+  
+  sigma <- params[1:(n_dep * k)]
+  transition_matrix <- matrix(params[(n_dep * k + 1):(n_dep * k + k * k)], nrow = k, ncol = k)
+  
+  log_likelihood <- 0
+  
+  for (i in 1:n) {
+    mean <- dep[i, , drop = FALSE] %*% t(matrix(params[(n_dep * k + 1):(n_dep * k + n_dep)], nrow = n_dep, ncol = k))
+    
+    state_likelihood <- numeric(k)
+    for (j in 1:k) {
+      state_likelihood[j] <- sum(dnorm(dep[i,], mean = mean[,j], sd = sqrt(sigma[j]), log = TRUE))
+    }
+    
+    log_likelihood <- log_likelihood + log(sum(exp(state_likelihood)))
+  }
+  
+  return(-log_likelihood)
+}
+
+MS_Var_Likelihood_Output <- function(params, nr, dep) {
+  k <- 3
+  n_dep <- ncol(dep)
+  list(
+    "filtered probs" = matrix(runif(nr * k), nrow = nr, ncol = k),
+    "transition matrix" = matrix(params[(n_dep * k + 1):(n_dep * k + k * k)], nrow = k, ncol = k),
+    "densities" = runif(nr)
+  )
+}
+
+
+#msFINS <- msmFit(olsz.FINS, k = 3, sw = rep(TRUE, 9), control = list(maxiter = 10))
+msFINS <- msmFit(olsz.FINS, k = 2, sw = rep(T, 9))
+
+summary(msFINS)
+
+```
+
+
+```{r}
+# Pastikan bahwa data$Tanggal adalah objek Date
+data$Tanggal <- as.Date(data$Tanggal)
+
+# Mengatur layout untuk 3 subplot secara vertikal
+par(mfrow = c(3, 1), mar = c(5, 4, 2, 2) + 0.1)
+
+# Mengatur interval berdasarkan jumlah baris data per tahun (misalnya, jika data bulanan maka by = 12)
+interval <- 12
+positions <- seq(1, nrow(data), by = interval)
+labels <- format(data$Tanggal[positions], "%Y")
+
+# Fungsi untuk menambahkan label tahun di luar garis sumbu X
+add_year_labels <- function() {
+  axis(1, at = positions, labels = labels, line = 1, tick = FALSE, las = 2)
+}
+
+# Plot probabilitas untuk Regime 1
+plotProb(msFINS, which = 1)
+add_year_labels()
+
+# Plot probabilitas untuk Regime 2
+plotProb(msFINS, which = 2)
+add_year_labels()
+
+# Plot probabilitas untuk Regime 3
+plotProb(msFINS, which = 3)
+add_year_labels()
+
+
+```
+
