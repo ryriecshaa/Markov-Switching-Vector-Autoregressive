@@ -11,8 +11,13 @@ Research Objective: Utilizing MSVAR to accommodate regime changes in Sharia bank
 ![image](https://github.com/user-attachments/assets/c4e29942-2423-4bae-bd2e-1abab89642a2)
 
 ## 3 REGIME
+![image](https://github.com/user-attachments/assets/9b08e0d1-8a6c-4877-b9c0-9f50fbd27ff1)
 
 
 ## 4 REGIME
+![image](https://github.com/user-attachments/assets/cea35fc3-dd0b-4934-b7e5-0c59c4ef28a0) ![image](https://github.com/user-attachments/assets/8559eee5-50cd-425a-8cd3-918692341429)
+
 
 ## 5 REGIME
+![image](https://github.com/user-attachments/assets/637330ac-b4c9-4c69-aa5d-5ecb76e1d2d5) ![image](https://github.com/user-attachments/assets/9bff622d-5174-4879-ad93-06367ff5065c)
+
